@@ -504,7 +504,7 @@
   .tab-pill-active{ @apply bg-secondary text-white border-secondary; }
 
   /* gradient helpers */
-  .gradient-primary { @apply bg-gradient-to-br from-primary to-primary-dark; }
+  .gradient-primary { background: linear-gradient(135deg, #FF6B35, #E5501A); }
 
   /* btn-success, btn-accent variants */
   .btn-success { @apply btn bg-canteen-success text-white hover:bg-green-600 active:bg-green-700; }
