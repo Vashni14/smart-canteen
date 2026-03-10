@@ -29,14 +29,17 @@ api.interceptors.response.use(
     if (status === 401) {
       localStorage.removeItem('sc_token')
       localStorage.removeItem('sc_user')
-      window.location.href = '/login'
-      toast.error('Session expired. Please log in again.')
+      // Fire event — SessionExpiredModal listens and shows an in-app modal
+      window.dispatchEvent(new CustomEvent('sc:session-expired'))
     } else if (status === 403) {
       toast.error('You are not authorized to do that.')
     } else if (status === 404) {
       // Silently handle — component should show empty state
     } else if (status >= 500) {
       toast.error('Server error. Please try again later.')
+    } else if (!status) {
+      // Network error (offline, timeout, CORS)
+      toast.error('Network error — check your connection.')
     }
 
     return Promise.reject(error)

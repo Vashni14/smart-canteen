@@ -443,3 +443,89 @@
     .print-only { display: block !important; }
   }
 }
+
+/* ── Phase 8: Edge Case & Missing Utility Classes ───────────── */
+@layer components {
+
+  /* stat-card used in pickup + admin pages */
+  .stat-card {
+    @apply card card-body flex items-center gap-4 py-4;
+  }
+  .stat-icon {
+    @apply w-11 h-11 rounded-2xl flex items-center justify-center text-xl flex-shrink-0;
+  }
+  .stat-value {
+    @apply text-2xl font-display font-bold text-secondary leading-none;
+  }
+  .stat-label {
+    @apply text-xs text-canteen-muted mt-0.5;
+  }
+
+  /* card-flat — inset card for nested content */
+  .card-flat {
+    @apply bg-canteen-bg rounded-xl border border-canteen-border;
+  }
+
+  /* divider helpers */
+  .divider    { @apply h-px bg-canteen-border my-3; }
+  .divider-sm { @apply h-px bg-canteen-border my-2; }
+
+  /* price text */
+  .price-text    { @apply font-display font-bold text-primary; }
+  .price-text-lg { @apply font-display font-bold text-primary text-xl; }
+
+  /* label text (small caps labels) */
+  .label-text {
+    @apply text-xs font-bold text-canteen-muted uppercase tracking-wide;
+  }
+
+  /* section helpers */
+  .page-section  { @apply py-10 px-4 sm:px-6; }
+  .page-container{ @apply max-w-7xl mx-auto px-4 sm:px-6; }
+  .section-title  { @apply text-2xl font-display font-bold text-secondary; }
+  .section-subtitle { @apply text-canteen-muted mt-1; }
+
+  /* order card accent borders */
+  .order-card-new    { @apply border-l-4 border-canteen-info; }
+  .order-card-normal { @apply border-l-4 border-canteen-warning; }
+  .order-card-urgent { @apply border-l-4 border-canteen-danger; }
+  .order-card-ready  { @apply border-l-4 border-canteen-success; }
+
+  /* status chips */
+  .status-pending   { @apply badge bg-yellow-100 text-yellow-700 capitalize; }
+  .status-accepted  { @apply badge bg-blue-100 text-blue-700 capitalize; }
+  .status-preparing { @apply badge bg-orange-100 text-orange-700 capitalize; }
+  .status-ready     { @apply badge bg-green-100 text-green-700 capitalize; }
+  .status-collected { @apply badge bg-gray-100 text-gray-600 capitalize; }
+  .status-cancelled { @apply badge bg-red-100 text-red-700 capitalize; }
+
+  /* tab-pill (inline filter pills used in kitchen list view) */
+  .tab-pill       { @apply px-3 py-1.5 rounded-xl text-xs font-bold text-canteen-muted bg-white border border-canteen-border hover:border-secondary/40 transition-all; }
+  .tab-pill-active{ @apply bg-secondary text-white border-secondary; }
+
+  /* gradient helpers */
+  .gradient-primary { @apply bg-gradient-to-br from-primary to-primary-dark; }
+
+  /* btn-success, btn-accent variants */
+  .btn-success { @apply btn bg-canteen-success text-white hover:bg-green-600 active:bg-green-700; }
+  .btn-accent  { @apply btn bg-accent text-secondary hover:bg-accent-dark; }
+  .btn-white   { @apply btn bg-white text-secondary hover:bg-gray-50 border border-canteen-border; }
+  .btn-secondary { @apply btn bg-secondary text-white hover:bg-secondary-600; }
+
+  /* btn size helpers */
+  .btn-xs { @apply text-xs py-1 px-2.5 rounded-lg; }
+
+  /* empty-state class for inline use */
+  .empty-state       { @apply flex flex-col items-center justify-center text-center p-8; }
+  .empty-state-icon  { @apply text-5xl mb-3 opacity-50; }
+  .empty-state-title { @apply font-display font-bold text-secondary text-lg; }
+  .empty-state-desc  { @apply text-sm text-canteen-muted mt-1 max-w-xs; }
+
+  /* table helpers */
+  .table-container { @apply rounded-2xl border border-canteen-border overflow-hidden; }
+  .table-base      { @apply w-full text-sm; }
+  .table-thead     { @apply bg-canteen-bg border-b border-canteen-border; }
+  .table-th        { @apply text-left text-xs font-bold text-canteen-muted uppercase tracking-wide px-5 py-3; }
+  .table-tr        { @apply border-b border-canteen-border last:border-0 hover:bg-canteen-bg/50 transition-colors; }
+  .table-td        { @apply px-5 py-3.5; }
+}
