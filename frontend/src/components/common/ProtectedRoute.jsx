@@ -3,10 +3,13 @@ import { useAuth } from '@context/AuthContext'
 import LoadingScreen from './LoadingScreen'
 
 export default function ProtectedRoute({ children, roles = [] }) {
-  const { user, loading } = useAuth()
+  const { user, loading, DEV_MODE } = useAuth()
   const location = useLocation()
 
   if (loading) return <LoadingScreen />
+
+  // ── DEV MODE: skip all auth guards ───────────────────
+  if (DEV_MODE) return children
 
   if (!user) {
     return <Navigate to="/login" state={{ from: location }} replace />

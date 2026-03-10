@@ -33,6 +33,7 @@ import AdminReports     from '@pages/admin/AdminReports'
 
 // Guards
 import ProtectedRoute   from '@components/common/ProtectedRoute'
+import DevToolbar       from '@components/common/DevToolbar'
 
 export default function App() {
   return (
@@ -117,6 +118,7 @@ export default function App() {
             {/* ── Fallback ────────────────────────────────── */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          <DevToolbar />
         </SocketProvider>
       </CartProvider>
     </AuthProvider>
