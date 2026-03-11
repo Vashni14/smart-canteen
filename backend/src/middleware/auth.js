@@ -1,29 +1,45 @@
-const router   = require('express').Router()
-const { body }       = require('express-validator')
-const ctrl           = require('../controllers/authController')
-const { protect }    = require('../middleware/auth')
-const validate       = require('../middleware/validate')
+const jwt  = require('jsonwebtoken')
+const User = require('../models/User')
 
-router.post('/register',
-  [
-    body('name').trim().notEmpty().withMessage('Name is required'),
-    body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-    body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
-  ],
-  validate,
-  ctrl.register
-)
+const protect = async (req, res, next) => {
+  let token
 
-router.post('/login',
-  [
-    body('email').isEmail().withMessage('Valid email required').normalizeEmail(),
-    body('password').notEmpty().withMessage('Password is required'),
-  ],
-  validate,
-  ctrl.login
-)
+  if (req.headers.authorization?.startsWith('Bearer ')) {
+    token = req.headers.authorization.split(' ')[1]
+  }
 
-router.get('/profile',  protect, ctrl.getProfile)
-router.put('/profile',  protect, ctrl.updateProfile)
+  if (!token) {
+    return res.status(401).json({ message: 'Not authenticated — no token' })
+  }
 
-module.exports = router
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    const user    = await User.findById(decoded.id).select('-password')
+
+    if (!user) {
+      return res.status(401).json({ message: 'User no longer exists' })
+    }
+    if (!user.isActive) {
+      return res.status(401).json({ message: 'Account has been deactivated' })
+    }
+
+    req.user = user
+    next()
+  } catch (err) {
+    if (err.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Session expired — please log in again' })
+    }
+    return res.status(401).json({ message: 'Invalid token' })
+  }
+}
+
+const allow = (...roles) => (req, res, next) => {
+  if (!roles.includes(req.user?.role)) {
+    return res.status(403).json({
+      message: `Role '${req.user?.role}' is not permitted for this action`,
+    })
+  }
+  next()
+}
+
+module.exports = { protect, allow }

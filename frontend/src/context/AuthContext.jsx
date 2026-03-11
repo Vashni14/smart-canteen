@@ -1,36 +1,27 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
-import api from '@services/api'
+import api from '../services/api'
 import toast from 'react-hot-toast'
 
 const AuthContext = createContext(null)
 
-// ── DEV MODE: bypass login ────────────────────────────────
 const DEV_MODE = false
 
-const DEV_USERS = {
-  customer: { _id: 'dev-customer', name: 'Arjun (Dev)', email: 'student@college.edu', role: 'customer' },
-  chef:     { _id: 'dev-chef',     name: 'Chef Ravi (Dev)', email: 'chef@college.edu', role: 'chef' },
-  pickup:   { _id: 'dev-pickup',   name: 'Pickup Staff (Dev)', email: 'pickup@college.edu', role: 'pickup' },
-  admin:    { _id: 'dev-admin',    name: 'Admin (Dev)', email: 'admin@college.edu', role: 'admin' },
-}
-
 export function AuthProvider({ children }) {
-  const [user, setUser]       = useState(null)
+  const [user,    setUser]    = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Restore session from localStorage on mount
   useEffect(() => {
-    if (DEV_MODE) {
-      const devRole = localStorage.getItem('sc_dev_role') || 'customer'
-      setUser(DEV_USERS[devRole] || DEV_USERS.customer)
-      setLoading(false)
-      return
-    }
     const stored = localStorage.getItem('sc_user')
     const token  = localStorage.getItem('sc_token')
     if (stored && token) {
-      setUser(JSON.parse(stored))
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      try {
+        const parsed = JSON.parse(stored)
+        setUser(parsed)
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      } catch {
+        localStorage.removeItem('sc_user')
+        localStorage.removeItem('sc_token')
+      }
     }
     setLoading(false)
   }, [])
@@ -63,20 +54,19 @@ export function AuthProvider({ children }) {
     toast.success('Logged out successfully')
   }, [])
 
-  const updateProfile = useCallback((updates) => {
-    const updated = { ...user, ...updates }
+  const updateProfile = useCallback(async (updates) => {
+    const res = await api.put('/auth/profile', updates)
+    const updated = res.data?.user || { ...user, ...updates }
     localStorage.setItem('sc_user', JSON.stringify(updated))
     setUser(updated)
+    return updated
   }, [user])
 
-  const devSwitchRole = useCallback((role) => {
-    if (!DEV_MODE) return
-    localStorage.setItem('sc_dev_role', role)
-    setUser(DEV_USERS[role])
-  }, [])
-
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updateProfile, devSwitchRole, DEV_MODE }}>
+    <AuthContext.Provider value={{
+      user, loading, DEV_MODE,
+      login, register, logout, updateProfile,
+    }}>
       {children}
     </AuthContext.Provider>
   )

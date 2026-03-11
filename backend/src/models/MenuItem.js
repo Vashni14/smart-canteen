@@ -2,16 +2,16 @@ const mongoose = require('mongoose')
 
 const menuItemSchema = new mongoose.Schema({
   name: {
-    type:     String,
-    required: [true, 'Item name is required'],
-    trim:     true,
+    type:      String,
+    required:  [true, 'Item name is required'],
+    trim:      true,
     maxlength: [80, 'Name too long'],
   },
   description: {
-    type:    String,
-    trim:    true,
+    type:      String,
+    trim:      true,
     maxlength: [300, 'Description too long'],
-    default: '',
+    default:   '',
   },
   price: {
     type:     Number,
@@ -19,10 +19,10 @@ const menuItemSchema = new mongoose.Schema({
     min:      [1, 'Price must be at least ₹1'],
   },
   category: {
-    type:    String,
+    type:     String,
     required: true,
-    enum:    ['Breakfast', 'Snacks', 'Lunch', 'Dinner', 'Beverages', 'Desserts'],
-    default: 'Snacks',
+    enum:     ['Breakfast', 'Snacks', 'Lunch', 'Dinner', 'Beverages', 'Desserts'],
+    default:  'Snacks',
   },
   image: {
     type:    String,
@@ -33,12 +33,11 @@ const menuItemSchema = new mongoose.Schema({
     default: true,
   },
   preparationTime: {
-    type:    Number,   // minutes
+    type:    Number,
     default: 5,
     min:     1,
     max:     120,
   },
-  // soft-delete
   deleted: {
     type:    Boolean,
     default: false,
@@ -46,10 +45,10 @@ const menuItemSchema = new mongoose.Schema({
   },
 }, { timestamps: true })
 
-// Default query excludes deleted items
 menuItemSchema.pre(/^find/, function (next) {
   this.where({ deleted: { $ne: true } })
   next()
 })
 
-module.exports = mongoose.model('MenuItem', menuItemSchema)
+module.exports =
+  mongoose.models.MenuItem || mongoose.model('MenuItem', menuItemSchema)

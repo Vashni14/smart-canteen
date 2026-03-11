@@ -7,10 +7,9 @@ const inventorySchema = new mongoose.Schema({
     trim:     true,
     unique:   true,
   },
-  // Optional link to a MenuItem
   menuItem: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref:  'MenuItem',
+    type:    mongoose.Schema.Types.ObjectId,
+    ref:     'MenuItem',
     default: null,
   },
   stock: {
@@ -20,25 +19,25 @@ const inventorySchema = new mongoose.Schema({
   },
   unit: {
     type:    String,
-    default: 'units',  // kg, litres, units, etc.
+    default: 'units',
     trim:    true,
   },
   threshold: {
     type:    Number,
-    default: 10,  // Low stock alert below this
+    default: 10,
     min:     0,
   },
   restockLog: [{
-    quantity:  Number,
-    addedBy:   { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-    addedAt:   { type: Date, default: Date.now },
-    note:      String,
+    quantity: Number,
+    addedBy:  { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    addedAt:  { type: Date, default: Date.now },
+    note:     String,
   }],
 }, { timestamps: true })
 
-// Virtual: is low stock?
 inventorySchema.virtual('isLow').get(function () {
   return this.stock <= this.threshold
 })
 
-module.exports = mongoose.model('Inventory', inventorySchema)
+module.exports =
+  mongoose.models.Inventory || mongoose.model('Inventory', inventorySchema)

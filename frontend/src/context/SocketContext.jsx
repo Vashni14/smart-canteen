@@ -1,49 +1,70 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react'
+import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react'
 import { io } from 'socket.io-client'
 import { useAuth } from './AuthContext'
 
 const SocketContext = createContext(null)
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000'
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001'
 
 export function SocketProvider({ children }) {
-  const { user }            = useAuth()
-  const socketRef           = useRef(null)
+  const { user }                  = useAuth()
+  const socketRef                 = useRef(null)
   const [connected, setConnected] = useState(false)
 
   useEffect(() => {
     const token = localStorage.getItem('sc_token')
 
-    socketRef.current = io(SOCKET_URL, {
-      auth: { token },
-      transports: ['websocket', 'polling'],
-      reconnectionAttempts: 5,
-      reconnectionDelay: 2000,
+    const socket = io(SOCKET_URL, {
+      auth:                { token },
+      transports:          ['websocket', 'polling'],
+      reconnectionAttempts: 10,
+      reconnectionDelay:   2000,
+      reconnectionDelayMax:10000,
     })
 
-    const s = socketRef.current
+    socketRef.current = socket
 
-    s.on('connect',    () => setConnected(true))
-    s.on('disconnect', () => setConnected(false))
+    socket.on('connect', () => {
+      setConnected(true)
+      // Re-join rooms after reconnect
+      if (user) {
+        socket.emit('join-room', user.role)
+        if (user.role === 'customer') {
+          socket.emit('join-room', `user-${user._id}`)
+        }
+      }
+    })
 
+    socket.on('disconnect', () => setConnected(false))
+
+    socket.on('connect_error', (err) => {
+      console.warn('Socket connection error:', err.message)
+    })
+
+    // Join role room immediately if already have user
     if (user) {
-      s.emit('join-room', user.role)
+      socket.emit('join-room', user.role)
       if (user.role === 'customer') {
-        s.emit('join-room', `user-${user._id}`)
+        socket.emit('join-room', `user-${user._id}`)
       }
     }
 
     return () => {
-      s.disconnect()
+      socket.disconnect()
     }
-  }, [user])
+  }, [user?._id, user?.role])
 
-  const on  = (event, cb) => socketRef.current?.on(event, cb)
-  const off = (event, cb) => socketRef.current?.off(event, cb)
-  const emit = (event, data) => socketRef.current?.emit(event, data)
+  const on   = useCallback((event, cb) => socketRef.current?.on(event, cb),   [])
+  const off  = useCallback((event, cb) => socketRef.current?.off(event, cb),  [])
+  const emit = useCallback((event, data) => socketRef.current?.emit(event, data), [])
+
+  // Join a specific order tracking room
+  const joinOrder = useCallback((orderId) => {
+    socketRef.current?.emit('join:order', orderId)
+  }, [])
 
   return (
-    <SocketContext.Provider value={{ connected, on, off, emit, socket: socketRef }}>
+    <SocketContext.Provider value={{ connected, on, off, emit, joinOrder, socket: socketRef }}>
       {children}
     </SocketContext.Provider>
   )

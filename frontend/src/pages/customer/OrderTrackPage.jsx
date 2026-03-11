@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 
 export default function OrderTrackPage() {
   const { id }           = useParams()
-  const { on, off }      = useSocket()
+  const { on, off, joinOrder } = useSocket()
 
   const [order, setOrder]   = useState(null)
   const [loading, setLoad]  = useState(true)
@@ -31,7 +31,7 @@ export default function OrderTrackPage() {
     }
   }
 
-  useEffect(() => { fetchOrder() }, [id])
+  useEffect(() => { fetchOrder(); joinOrder(id) }, [id, joinOrder])
 
   // Poll every 30s as fallback
   useInterval(fetchOrder, 30_000)
