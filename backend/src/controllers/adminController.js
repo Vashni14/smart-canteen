@@ -176,3 +176,40 @@ exports.updateRole = async (req, res, next) => {
     res.json({ success: true, user })
   } catch (err) { next(err) }
 }
+
+/* POST /api/admin/staff  — create chef or pickup account */
+exports.createStaff = async (req, res, next) => {
+  try {
+    const { name, email, password, role } = req.body
+    const allowed = ['chef', 'pickup', 'admin']
+    if (!allowed.includes(role)) {
+      return res.status(400).json({ message: 'Can only create chef, pickup, or admin accounts' })
+    }
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email and password are required' })
+    }
+    const existing = await User.findOne({ email: email.toLowerCase() })
+    if (existing) return res.status(409).json({ message: 'Email already registered' })
+
+    const user = await User.create({
+      name, email: email.toLowerCase(), password, role
+    })
+    res.status(201).json({ success: true, user })
+  } catch (err) { next(err) }
+}
+
+/* DELETE /api/admin/staff/:id — remove a user (cannot delete self or admins) */
+exports.deleteStaff = async (req, res, next) => {
+  try {
+    if (req.params.id === req.user._id.toString()) {
+      return res.status(400).json({ message: 'You cannot delete your own account' })
+    }
+    const user = await User.findById(req.params.id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    if (user.role === 'admin') {
+      return res.status(403).json({ message: 'Cannot delete admin accounts' })
+    }
+    await User.findByIdAndDelete(req.params.id)
+    res.json({ success: true, message: `${user.name} has been removed` })
+  } catch (err) { next(err) }
+}

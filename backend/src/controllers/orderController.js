@@ -184,3 +184,33 @@ exports.cancelOrder = async (req, res, next) => {
     res.json({ success: true, order })
   } catch (err) { next(err) }
 }
+
+/* GET /api/orders/all  [admin] — all orders with pagination */
+exports.getAllOrders = async (req, res, next) => {
+  try {
+    const { status, page = 1, limit = 50, search } = req.query
+    const filter = {}
+    if (status && status !== 'all') filter.status = status
+
+    let query = Order.find(filter)
+      .populate('userId', 'name email')
+      .sort({ createdAt: -1 })
+      .limit(Number(limit))
+      .skip((Number(page) - 1) * Number(limit))
+
+    let orders = await query
+
+    // Client-side search filter (orderNumber or customer name)
+    if (search) {
+      const s = search.toLowerCase()
+      orders = orders.filter(o =>
+        o.orderNumber?.toLowerCase().includes(s) ||
+        o.userId?.name?.toLowerCase().includes(s) ||
+        o.userId?.email?.toLowerCase().includes(s)
+      )
+    }
+
+    const total = await Order.countDocuments(filter)
+    res.json({ success: true, orders, total, page: Number(page) })
+  } catch (err) { next(err) }
+}

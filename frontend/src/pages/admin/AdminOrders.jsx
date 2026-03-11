@@ -2,68 +2,85 @@ import { useState, useEffect, useCallback } from 'react'
 import { orderService } from '@services/index'
 import { useSocket } from '@context/SocketContext'
 import { useDebounce, useInterval } from '@hooks/useHelpers'
-import OrderTable from '@components/common/OrderTable'
-import LoadingSkeleton from '@components/common/LoadingSkeleton'
 import Modal from '@components/common/Modal'
 import SearchBar from '@components/common/SearchBar'
-import { formatCurrency, formatDate, getStatusClass, ORDER_STATUSES } from '@utils/index'
+import LoadingSkeleton from '@components/common/LoadingSkeleton'
+import { formatCurrency, formatDate, formatTime } from '@utils/index'
 import toast from 'react-hot-toast'
 
-const STATUS_TABS = ['all', 'pending', 'accepted', 'preparing', 'ready', 'collected', 'cancelled']
+const STATUS_TABS = ['all','pending','accepted','preparing','ready','collected','cancelled']
+
+const STATUS_STYLE = {
+  pending:   'bg-yellow-100 text-yellow-700',
+  accepted:  'bg-blue-100 text-blue-700',
+  preparing: 'bg-orange-100 text-orange-700',
+  ready:     'bg-green-100 text-green-700',
+  collected: 'bg-gray-100 text-gray-600',
+  cancelled: 'bg-red-100 text-red-700',
+}
+
+const NEXT_STATUS = {
+  pending:   ['accepted','cancelled'],
+  accepted:  ['preparing','cancelled'],
+  preparing: ['ready'],
+  ready:     ['collected'],
+}
 
 export default function AdminOrders() {
-  const { on, off }         = useSocket()
-  const [orders,  setOrders]= useState([])
-  const [loading, setLoad]  = useState(true)
-  const [search,  setSearch]= useState('')
-  const [tab,     setTab]   = useState('all')
-  const [detail,  setDetail]= useState(null)
-  const dSearch             = useDebounce(search, 350)
+  const { on, off }          = useSocket()
+  const [orders,  setOrders] = useState([])
+  const [loading, setLoad]   = useState(true)
+  const [search,  setSearch] = useState('')
+  const [tab,     setTab]    = useState('all')
+  const [detail,  setDetail] = useState(null)
+  const dSearch              = useDebounce(search, 350)
 
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await orderService.getKitchen()
-      setOrders(res.data?.orders || res.data || [])
-    } catch { toast.error('Failed to load orders') }
-    finally { setLoad(false) }
+      const res = await orderService.getAll()
+      setOrders(res.data?.orders || [])
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to load orders')
+    } finally {
+      setLoad(false)
+    }
   }, [])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
   useInterval(fetchOrders, 45_000)
 
-  // Live updates
+  // Live socket updates
   useEffect(() => {
-    const onNew     = (o) => setOrders(p => [o, ...p])
-    const onUpdate  = (o) => setOrders(p => p.map(x => x._id === o._id ? { ...x, ...o } : x))
+    const onNew    = (o) => setOrders(p => [o, ...p])
+    const onUpdate = (o) => setOrders(p => p.map(x => x._id === o._id ? { ...x, ...o } : x))
     on('order:new',            onNew)
     on('order:status-updated', onUpdate)
     return () => { off('order:new', onNew); off('order:status-updated', onUpdate) }
   }, [on, off])
 
-  /* ── Filter ─────────────────────────────────────────── */
   const filtered = orders.filter(o => {
     const matchTab    = tab === 'all' || o.status === tab
     const matchSearch = !dSearch ||
       o.userId?.name?.toLowerCase().includes(dSearch.toLowerCase()) ||
-      o._id?.toLowerCase().includes(dSearch.toLowerCase()) ||
       o.orderNumber?.toLowerCase().includes(dSearch.toLowerCase())
     return matchTab && matchSearch
   })
 
-  /* ── Status change ───────────────────────────────────── */
+  const tabCounts = STATUS_TABS.reduce((acc, s) => {
+    acc[s] = s === 'all' ? orders.length : orders.filter(o => o.status === s).length
+    return acc
+  }, {})
+
   const handleStatusChange = async (orderId, newStatus) => {
     setOrders(prev => prev.map(o => o._id === orderId ? { ...o, status: newStatus } : o))
     try {
       await orderService.updateStatus(orderId, newStatus)
-      toast.success(`Order status → ${newStatus}`)
-    } catch {
+      toast.success(`Status → ${newStatus}`)
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to update status')
       fetchOrders()
-      toast.error('Status update failed')
     }
   }
-
-  /* ── Tab counts ──────────────────────────────────────── */
-  const count = (s) => s === 'all' ? orders.length : orders.filter(o => o.status === s).length
 
   return (
     <div className="space-y-5 animate-fade-in">
@@ -71,132 +88,173 @@ export default function AdminOrders() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="section-title">Order Monitoring</h2>
+          <h2 className="section-title">All Orders</h2>
           <p className="section-subtitle">{orders.length} total orders</p>
         </div>
-        <button onClick={fetchOrders} className="btn-ghost btn-sm gap-1">🔄 Refresh</button>
+        <button onClick={fetchOrders} className="btn-ghost btn-sm">🔄 Refresh</button>
       </div>
 
       {/* Search */}
-      <SearchBar value={search} onChange={setSearch} placeholder="Search by name or order ID…" />
+      <SearchBar value={search} onChange={setSearch} placeholder="Search by order number or customer…" />
 
       {/* Status tabs */}
-      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+      <div className="flex flex-wrap gap-2">
         {STATUS_TABS.map(s => (
           <button
             key={s}
             onClick={() => setTab(s)}
-            className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all capitalize
-              ${tab === s ? 'bg-secondary text-white' : 'bg-white border border-canteen-border text-canteen-muted hover:border-secondary/50'}`}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold capitalize transition-all border ${
+              tab === s
+                ? 'bg-secondary text-white border-secondary'
+                : 'bg-white text-canteen-muted border-canteen-border hover:border-secondary/40'
+            }`}
           >
-            {s} <span className={`w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold
-              ${tab === s ? 'bg-white/20 text-white' : 'bg-canteen-border text-secondary'}`}>
-              {count(s)}
-            </span>
+            {s} {tabCounts[s] > 0 && <span className="ml-1 opacity-70">({tabCounts[s]})</span>}
           </button>
         ))}
       </div>
 
       {/* Table */}
-      {loading ? (
-        <LoadingSkeleton variant="table" rows={8} />
-      ) : (
-        <OrderTable
-          orders={filtered}
-          onStatusChange={handleStatusChange}
-          onView={setDetail}
-        />
-      )}
-
-      {/* Order detail modal */}
-      <Modal
-        isOpen={!!detail}
-        onClose={() => setDetail(null)}
-        title={`Order #${detail?.orderNumber || detail?._id?.slice(-6).toUpperCase()}`}
-        size="md"
-      >
-        {detail && <OrderDetailView order={detail} onStatusChange={handleStatusChange} onClose={() => setDetail(null)} />}
-      </Modal>
-
-    </div>
-  )
-}
-
-function OrderDetailView({ order, onStatusChange, onClose }) {
-  const [saving, setSaving] = useState(false)
-  const orderNum = order.orderNumber || order._id?.slice(-6).toUpperCase()
-
-  const handleStatus = async (newStatus) => {
-    setSaving(true)
-    await onStatusChange(order._id, newStatus)
-    setSaving(false)
-    onClose()
-  }
-
-  const NEXT = { pending:'accepted', accepted:'preparing', preparing:'ready', ready:'collected' }
-  const nextStatus = NEXT[order.status]
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        {[
-          ['Order #',   `#${orderNum}`],
-          ['Status',    <span className={getStatusClass(order.status)}>{order.status}</span>],
-          ['Customer',  order.userId?.name || '—'],
-          ['Email',     order.userId?.email || '—'],
-          ['Placed at', formatDate(order.createdAt)],
-          ['Payment',   order.paymentMethod || 'upi'],
-        ].map(([label, val]) => (
-          <div key={label}>
-            <p className="label-text">{label}</p>
-            <p className="font-semibold text-secondary mt-0.5">{val}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="divider" />
-
-      <div className="space-y-2">
-        <p className="label-text">Items Ordered</p>
-        {order.items?.map((item, i) => (
-          <div key={i} className="flex items-center justify-between py-1.5 border-b border-canteen-border last:border-0">
-            <div className="flex items-center gap-2">
-              <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">{item.qty}</span>
-              <div>
-                <p className="text-sm font-semibold text-secondary">{item.name}</p>
-                {item.note && <p className="text-xs text-canteen-muted italic">"{item.note}"</p>}
-              </div>
-            </div>
-            <span className="text-sm font-semibold text-secondary">{formatCurrency(item.price * item.qty)}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex justify-between pt-1 font-display font-bold text-secondary">
-        <span>Total</span>
-        <span className="text-primary">{formatCurrency(order.totalPrice)}</span>
-      </div>
-
-      {order.notes && (
-        <div className="p-3 bg-accent/10 rounded-xl border border-accent/20">
-          <p className="label-text mb-1">Order Note</p>
-          <p className="text-sm text-secondary">"{order.notes}"</p>
+      {loading ? <LoadingSkeleton variant="table" rows={8} /> : (
+        <div className="table-container overflow-x-auto">
+          <table className="table-base">
+            <thead className="table-thead">
+              <tr>
+                <th className="table-th">Order</th>
+                <th className="table-th">Customer</th>
+                <th className="table-th">Items</th>
+                <th className="table-th">Total</th>
+                <th className="table-th">Status</th>
+                <th className="table-th">Date</th>
+                <th className="table-th text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr><td colSpan={7} className="table-td text-center py-10 text-canteen-muted">No orders found</td></tr>
+              ) : filtered.map(o => (
+                <tr key={o._id} className="table-tr cursor-pointer hover:bg-primary/5" onClick={() => setDetail(o)}>
+                  <td className="table-td">
+                    <span className="font-mono font-bold text-xs text-secondary">
+                      #{o.orderNumber || o._id?.slice(-6).toUpperCase()}
+                    </span>
+                  </td>
+                  <td className="table-td text-sm">{o.userId?.name || '—'}</td>
+                  <td className="table-td text-sm text-canteen-muted">{o.items?.length} item(s)</td>
+                  <td className="table-td">
+                    <span className="price-text text-sm">{formatCurrency(o.totalPrice)}</span>
+                  </td>
+                  <td className="table-td" onClick={e => e.stopPropagation()}>
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${STATUS_STYLE[o.status] || ''}`}>
+                      {o.status}
+                    </span>
+                  </td>
+                  <td className="table-td text-xs text-canteen-muted">{formatDate(o.createdAt)}</td>
+                  <td className="table-td text-right" onClick={e => e.stopPropagation()}>
+                    <div className="flex gap-1 justify-end flex-wrap">
+                      {(NEXT_STATUS[o.status] || []).map(ns => (
+                        <button
+                          key={ns}
+                          onClick={() => handleStatusChange(o._id, ns)}
+                          className="btn-xs btn-outline capitalize"
+                        >
+                          → {ns}
+                        </button>
+                      ))}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
-      {nextStatus && (
-        <div className="divider" />
-      )}
+      {/* Order detail modal */}
+      <Modal isOpen={!!detail} onClose={() => setDetail(null)} title={`Order #${detail?.orderNumber || ''}`} size="md">
+        {detail && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="card-flat p-3">
+                <p className="label-text mb-1">Customer</p>
+                <p className="font-semibold text-secondary">{detail.userId?.name}</p>
+                <p className="text-canteen-muted text-xs">{detail.userId?.email}</p>
+              </div>
+              <div className="card-flat p-3">
+                <p className="label-text mb-1">Payment</p>
+                <p className="font-semibold text-secondary capitalize">{detail.paymentMethod}</p>
+                <p className={`text-xs font-bold ${detail.paymentStatus === 'paid' ? 'text-canteen-success' : 'text-canteen-warning'}`}>
+                  {detail.paymentStatus}
+                </p>
+              </div>
+              <div className="card-flat p-3">
+                <p className="label-text mb-1">Status</p>
+                <span className={`px-2.5 py-1 rounded-full text-xs font-bold capitalize ${STATUS_STYLE[detail.status]}`}>
+                  {detail.status}
+                </span>
+              </div>
+              <div className="card-flat p-3">
+                <p className="label-text mb-1">Placed</p>
+                <p className="font-semibold text-secondary text-xs">{formatDate(detail.createdAt)}</p>
+                <p className="text-canteen-muted text-xs">{formatTime(detail.createdAt)}</p>
+              </div>
+            </div>
 
-      {nextStatus && (
-        <button
-          onClick={() => handleStatus(nextStatus)}
-          disabled={saving}
-          className="btn-primary w-full capitalize"
-        >
-          {saving ? 'Updating…' : `Move to → ${nextStatus}`}
-        </button>
-      )}
+            <div className="card-flat p-4 space-y-2">
+              <p className="label-text mb-2">Items</p>
+              {detail.items?.map((item, i) => (
+                <div key={i} className="flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center">
+                      {item.qty}
+                    </span>
+                    <span className="text-secondary">{item.name}</span>
+                    {item.note && <span className="text-xs text-canteen-muted italic">({item.note})</span>}
+                  </div>
+                  <span className="font-semibold text-secondary">{formatCurrency(item.price * item.qty)}</span>
+                </div>
+              ))}
+              <div className="divider" />
+              <div className="flex justify-between font-bold">
+                <span className="text-secondary">Total</span>
+                <span className="price-text">{formatCurrency(detail.totalPrice)}</span>
+              </div>
+            </div>
+
+            {/* Status history */}
+            {detail.statusHistory?.length > 0 && (
+              <div className="card-flat p-4">
+                <p className="label-text mb-3">Status History</p>
+                <div className="space-y-2">
+                  {detail.statusHistory.map((h, i) => (
+                    <div key={i} className="flex items-center gap-3 text-xs">
+                      <span className={`px-2 py-0.5 rounded-full font-bold capitalize ${STATUS_STYLE[h.status] || 'bg-gray-100 text-gray-600'}`}>
+                        {h.status}
+                      </span>
+                      <span className="text-canteen-muted">{formatTime(h.timestamp)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Next actions */}
+            {(NEXT_STATUS[detail.status] || []).length > 0 && (
+              <div className="flex gap-2">
+                {(NEXT_STATUS[detail.status] || []).map(ns => (
+                  <button
+                    key={ns}
+                    onClick={() => { handleStatusChange(detail._id, ns); setDetail(d => ({ ...d, status: ns })) }}
+                    className="btn-primary flex-1 capitalize"
+                  >
+                    Move to {ns}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
     </div>
   )
 }
