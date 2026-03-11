@@ -14,23 +14,22 @@ import toast from 'react-hot-toast'
 export default function PickupDashboard() {
   const { on, off } = useSocket()
 
-  const [readyOrders,     setReady]     = useState([])
-  const [recentCollected, setCollected] = useState([])
-  const [loading,         setLoading]   = useState(true)
-  const [error,           setError]     = useState(null)
-  const [collecting,      setCollecting]= useState(null)  // orderId being processed
+  const [readyOrders,     setReady]      = useState([])
+  const [recentCollected, setCollected]  = useState([])
+  const [loading,         setLoading]    = useState(true)
+  const [error,           setError]      = useState(null)
+  const [collecting,      setCollecting] = useState(null)
 
-  // Scanner state
-  const [scanOpen,     setScanOpen]     = useState(false)
-  const [scannedOrder, setScannedOrder] = useState(null)
-  const [verifyResult, setVerifyResult] = useState(null)
-  const [verifyOpen,   setVerifyOpen]   = useState(false)
-  const [verifyLoading,setVerifyLoad]   = useState(false)
+  const [scanOpen,      setScanOpen]     = useState(false)
+  const [scannedOrder,  setScannedOrder] = useState(null)
+  const [verifyResult,  setVerifyResult] = useState(null)
+  const [verifyOpen,    setVerifyOpen]   = useState(false)
+  const [verifyLoading, setVerifyLoad]   = useState(false)
 
-  /* ── Fetch ready orders ──────────────────────────────── */
+  /* ── Fetch ───────────────────────────────────────────── */
   const fetchOrders = useCallback(async () => {
     try {
-      const res = await orderService.getReady()
+      const res  = await orderService.getReady()
       const data = res.data?.orders || res.data || []
       setReady(data)
       setError(null)
@@ -44,31 +43,32 @@ export default function PickupDashboard() {
   useEffect(() => { fetchOrders() }, [fetchOrders])
   useInterval(fetchOrders, 30_000)
 
-  /* ── Socket listeners ────────────────────────────────── */
+  /* ── Socket ──────────────────────────────────────────── */
   useEffect(() => {
     const handleReady = (order) => {
       setReady(prev => {
         if (prev.find(o => o._id === order._id)) return prev
         toast('🛎️ New order ready for pickup!', {
-          icon: '📦',
           style: { background: '#2ECC71', color: '#fff', fontWeight: '700' },
         })
         return [order, ...prev]
       })
     }
-
-    const handleCollected = ({ orderId }) => {
+    const handleCollected = ({ orderId, _id }) => {
+      const id = orderId || _id
       setReady(prev => {
-        const order = prev.find(o => o._id === orderId)
+        const order = prev.find(o => o._id === id)
         if (order) {
-          setCollected(c => [{ ...order, status: 'collected', collectedAt: new Date() }, ...c].slice(0, 10))
+          setCollected(c =>
+            [{ ...order, status: 'collected', collectedAt: new Date() }, ...c].slice(0, 10)
+          )
         }
-        return prev.filter(o => o._id !== orderId)
+        return prev.filter(o => o._id !== id)
       })
     }
-
-    const handleCancelled = ({ orderId }) => {
-      setReady(prev => prev.filter(o => o._id !== orderId))
+    const handleCancelled = ({ orderId, _id }) => {
+      const id = orderId || _id
+      setReady(prev => prev.filter(o => o._id !== id))
     }
 
     on('order:ready',     handleReady)
@@ -81,7 +81,7 @@ export default function PickupDashboard() {
     }
   }, [on, off])
 
-  /* ── Mark collected (direct button) ─────────────────── */
+  /* ── Collect ─────────────────────────────────────────── */
   const handleCollect = async (orderId) => {
     setCollecting(orderId)
     try {
@@ -93,7 +93,7 @@ export default function PickupDashboard() {
           [{ ...order, status: 'collected', collectedAt: new Date() }, ...prev].slice(0, 10)
         )
       }
-      toast.success('Order collected successfully! ✅')
+      toast.success('Order collected ✅')
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to mark collected')
     } finally {
@@ -101,7 +101,7 @@ export default function PickupDashboard() {
     }
   }
 
-  /* ── QR scan flow ────────────────────────────────────── */
+  /* ── QR flow ─────────────────────────────────────────── */
   const handleOpenScan = (order = null) => {
     setScannedOrder(order)
     setScanOpen(true)
@@ -112,33 +112,59 @@ export default function PickupDashboard() {
     setVerifyLoad(true)
 
     try {
-      // Parse QR data
-      let parsed = {}
-      try { parsed = JSON.parse(qrData) } catch { parsed = { orderId: qrData } }
+      // Parse QR — could be JSON {"orderId":"...","orderNumber":"SC0001"}
+      // or plain string like "SC0001" or a raw MongoDB ID
+      let orderId = null
+      let orderNumber = null
 
-      const targetId = parsed.orderId || qrData
-      const order    = readyOrders.find(o => o._id === targetId)
+      try {
+        const parsed = JSON.parse(qrData)
+        orderId     = parsed.orderId
+        orderNumber = parsed.orderNumber
+      } catch {
+        // Not JSON — treat as raw value (order number or ID)
+        const val = qrData.trim().toUpperCase()
+        if (val.startsWith('SC')) {
+          orderNumber = val
+        } else {
+          orderId = qrData.trim()
+        }
+      }
 
-      if (!order) {
-        // Could be a different order number or already collected
-        const alreadyCollected = recentCollected.find(o => o._id === targetId)
-        setScannedOrder({
-          _id:        targetId,
-          orderNumber: parsed.orderNumber || targetId.slice(-6).toUpperCase(),
-          items:      [],
-          totalPrice: 0,
-          userId:     { name: 'Unknown' },
-        })
-        setVerifyResult({
-          valid:            false,
-          alreadyCollected: !!alreadyCollected,
-          reason: alreadyCollected
-            ? 'This order was already collected.'
-            : 'Order not found in ready list. It may not be ready yet or already collected.',
-        })
-      } else {
+      // Find order by MongoDB _id OR by orderNumber
+      const order = readyOrders.find(o =>
+        (orderId     && o._id         === orderId)     ||
+        (orderNumber && o.orderNumber === orderNumber) ||
+        // also try matching last 6 chars for short IDs typed manually
+        o.orderNumber === qrData.trim().toUpperCase()
+      )
+
+      const alreadyCollected = recentCollected.find(o =>
+        o._id === orderId || o.orderNumber === orderNumber
+      )
+
+      if (order) {
         setScannedOrder(order)
         setVerifyResult({ valid: true })
+      } else if (alreadyCollected) {
+        setScannedOrder(alreadyCollected)
+        setVerifyResult({
+          valid:            false,
+          alreadyCollected: true,
+          reason:           'This order has already been collected.',
+        })
+      } else {
+        setScannedOrder({
+          _id:         orderId || qrData,
+          orderNumber: orderNumber || qrData.toUpperCase(),
+          items:       [],
+          totalPrice:  0,
+          userId:      { name: 'Unknown' },
+        })
+        setVerifyResult({
+          valid:  false,
+          reason: 'Order not found in ready list. It may not be ready yet, or was already collected.',
+        })
       }
     } catch {
       setVerifyResult({ valid: false, reason: 'Could not read QR code data.' })
@@ -160,8 +186,7 @@ export default function PickupDashboard() {
   }
 
   /* ── Stats ───────────────────────────────────────────── */
-  const todayCollected = recentCollected.length
-  const longestWait    = readyOrders.length
+  const longestWait = readyOrders.length
     ? Math.max(...readyOrders.map(o =>
         Math.floor((Date.now() - new Date(o.updatedAt || o.createdAt)) / 60_000)
       ))
@@ -181,20 +206,16 @@ export default function PickupDashboard() {
   return (
     <div className="space-y-5 animate-fade-in">
 
-      {/* ── Header ─────────────────────────────────────── */}
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="section-title">Pickup Counter</h2>
           <p className="section-subtitle">
-            {readyOrders.length} order{readyOrders.length !== 1 ? 's' : ''} waiting for pickup
+            {readyOrders.length} order{readyOrders.length !== 1 ? 's' : ''} waiting
           </p>
         </div>
-
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => handleOpenScan()}
-            className="btn-primary gap-2"
-          >
+          <button onClick={() => handleOpenScan()} className="btn-primary gap-2">
             📷 Scan QR Code
           </button>
           <button onClick={fetchOrders} className="btn-ghost btn-icon" title="Refresh">
@@ -203,7 +224,7 @@ export default function PickupDashboard() {
         </div>
       </div>
 
-      {/* ── Stats ──────────────────────────────────────── */}
+      {/* Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="stat-card">
           <div className="stat-icon bg-canteen-success/10">🛎️</div>
@@ -215,14 +236,12 @@ export default function PickupDashboard() {
         <div className="stat-card">
           <div className="stat-icon bg-primary/10">✅</div>
           <div>
-            <p className="stat-value">{todayCollected}</p>
-            <p className="stat-label">Collected Today</p>
+            <p className="stat-value">{recentCollected.length}</p>
+            <p className="stat-label">Collected</p>
           </div>
         </div>
         <div className="stat-card">
-          <div className={`stat-icon ${longestWait >= 10 ? 'bg-canteen-warning/10' : 'bg-canteen-bg'}`}>
-            ⏱
-          </div>
+          <div className={`stat-icon ${longestWait >= 10 ? 'bg-canteen-warning/10' : 'bg-canteen-bg'}`}>⏱</div>
           <div>
             <p className={`stat-value ${longestWait >= 10 ? 'text-canteen-warning' : ''}`}>
               {longestWait}m
@@ -232,7 +251,7 @@ export default function PickupDashboard() {
         </div>
       </div>
 
-      {/* ── Ready orders ───────────────────────────────── */}
+      {/* Ready orders */}
       {readyOrders.length === 0 ? (
         <div className="card">
           <div className="empty-state py-16">
@@ -245,7 +264,7 @@ export default function PickupDashboard() {
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {readyOrders
+          {[...readyOrders]
             .sort((a, b) => new Date(a.updatedAt || a.createdAt) - new Date(b.updatedAt || b.createdAt))
             .map((order, i) => (
               <div key={order._id} style={{ animationDelay: `${i * 60}ms` }}>
@@ -261,7 +280,7 @@ export default function PickupDashboard() {
         </div>
       )}
 
-      {/* ── Recently Collected ──────────────────────────── */}
+      {/* Recently Collected */}
       {recentCollected.length > 0 && (
         <div className="space-y-3">
           <h3 className="font-display font-bold text-secondary text-base flex items-center gap-2">
@@ -276,7 +295,7 @@ export default function PickupDashboard() {
                   <th className="table-th">Customer</th>
                   <th className="table-th">Items</th>
                   <th className="table-th">Total</th>
-                  <th className="table-th">Collected</th>
+                  <th className="table-th">Time</th>
                 </tr>
               </thead>
               <tbody>
@@ -303,20 +322,12 @@ export default function PickupDashboard() {
         </div>
       )}
 
-      {/* ── QR Scanner Modal ───────────────────────────── */}
-      <Modal
-        isOpen={scanOpen}
-        onClose={() => setScanOpen(false)}
-        title="Scan Customer QR Code"
-        size="sm"
-      >
-        <QRScanner
-          onScan={handleQRResult}
-          onClose={() => setScanOpen(false)}
-        />
+      {/* Scanner Modal */}
+      <Modal isOpen={scanOpen} onClose={() => setScanOpen(false)} title="Scan Customer QR Code" size="sm">
+        <QRScanner onScan={handleQRResult} onClose={() => setScanOpen(false)} />
       </Modal>
 
-      {/* ── QR Verify Modal ────────────────────────────── */}
+      {/* Verify Modal */}
       <QRVerifyModal
         isOpen={verifyOpen}
         order={scannedOrder}
@@ -325,7 +336,6 @@ export default function PickupDashboard() {
         onClose={() => { setVerifyOpen(false); setScannedOrder(null) }}
         loading={verifyLoading}
       />
-
     </div>
   )
 }

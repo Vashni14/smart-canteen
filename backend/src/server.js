@@ -24,16 +24,25 @@ connectDB()
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (Postman, curl, server-to-server)
+    // Allow requests with no origin (Postman, curl, mobile apps)
     if (!origin) return callback(null, true)
-    // Allow any localhost port in development
-    if (process.env.NODE_ENV === 'development' && /^http:\/\/localhost(:\d+)?$/.test(origin)) {
+
+    // Allow any localhost port
+    if (/^https:\/\/localhost(:\d+)?$/.test(origin)) {
       return callback(null, true)
     }
-    // Allow configured CLIENT_URL in production
+
+    // Allow any local network IP (192.168.x.x, 10.x.x.x, 172.x.x.x)
+    if (/^https:\/\/(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01]))\d+\.\d+(:\d+)?$/.test(origin)) {
+      return callback(null, true)
+    }
+
+    // Allow configured CLIENT_URL (for production)
     if (origin === process.env.CLIENT_URL) {
       return callback(null, true)
     }
+
+    console.warn(`CORS blocked: ${origin}`)
     callback(new Error(`CORS blocked: ${origin}`))
   },
   credentials: true,
@@ -58,8 +67,10 @@ app.get('/api/health', (req, res) => {
 app.use(notFound)
 app.use(errorHandler)
 
-const PORT = process.env.PORT || 5000
-server.listen(PORT, () => {
-  console.log(`\n🚀 SmartCanteen backend: http://localhost:${PORT}`)
-  console.log(`   CORS: all localhost ports allowed in development\n`)
+const PORT = process.env.PORT || 5001
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🚀 SmartCanteen backend running`)
+  console.log(`   Local:   http://localhost:${PORT}`)
+  console.log(`   Network: http://<your-ip>:${PORT}`)
+  console.log(`   CORS:    localhost + local network IPs allowed\n`)
 })

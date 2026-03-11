@@ -4,7 +4,10 @@ import { useAuth } from './AuthContext'
 
 const SocketContext = createContext(null)
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5001'
+// On phone: window.location.hostname is the laptop's IP (e.g. 192.168.1.5)
+// On laptop: it's localhost
+// Either way, socket should connect to port 5001 on the same host
+const SOCKET_URL = `http://${window.location.hostname}:5001`
 
 export function SocketProvider({ children }) {
   const { user }                  = useAuth()
@@ -15,18 +18,16 @@ export function SocketProvider({ children }) {
     const token = localStorage.getItem('sc_token')
 
     const socket = io(SOCKET_URL, {
-      auth:                { token },
-      transports:          ['websocket', 'polling'],
+      auth:                 { token },
+      transports:           ['websocket', 'polling'],
       reconnectionAttempts: 10,
-      reconnectionDelay:   2000,
-      reconnectionDelayMax:10000,
+      reconnectionDelay:    2000,
     })
 
     socketRef.current = socket
 
     socket.on('connect', () => {
       setConnected(true)
-      // Re-join rooms after reconnect
       if (user) {
         socket.emit('join-room', user.role)
         if (user.role === 'customer') {
@@ -36,32 +37,15 @@ export function SocketProvider({ children }) {
     })
 
     socket.on('disconnect', () => setConnected(false))
+    socket.on('connect_error', (err) => console.warn('Socket error:', err.message))
 
-    socket.on('connect_error', (err) => {
-      console.warn('Socket connection error:', err.message)
-    })
-
-    // Join role room immediately if already have user
-    if (user) {
-      socket.emit('join-room', user.role)
-      if (user.role === 'customer') {
-        socket.emit('join-room', `user-${user._id}`)
-      }
-    }
-
-    return () => {
-      socket.disconnect()
-    }
+    return () => socket.disconnect()
   }, [user?._id, user?.role])
 
-  const on   = useCallback((event, cb) => socketRef.current?.on(event, cb),   [])
-  const off  = useCallback((event, cb) => socketRef.current?.off(event, cb),  [])
-  const emit = useCallback((event, data) => socketRef.current?.emit(event, data), [])
-
-  // Join a specific order tracking room
-  const joinOrder = useCallback((orderId) => {
-    socketRef.current?.emit('join:order', orderId)
-  }, [])
+  const on        = useCallback((event, cb)   => socketRef.current?.on(event, cb),             [])
+  const off       = useCallback((event, cb)   => socketRef.current?.off(event, cb),            [])
+  const emit      = useCallback((event, data) => socketRef.current?.emit(event, data),         [])
+  const joinOrder = useCallback((orderId)     => socketRef.current?.emit('join:order', orderId),[])
 
   return (
     <SocketContext.Provider value={{ connected, on, off, emit, joinOrder, socket: socketRef }}>
