@@ -133,7 +133,7 @@ exports.getReports = async (req, res, next) => {
       { $match: { ...baseMatch, status: { $ne: 'cancelled' } } },
       { $unwind: '$items' },
       { $lookup: { from: 'menuitems', localField: 'items.menuItem', foreignField: '_id', as: 'menu' } },
-      { $unwind: { path: '$menu', preserveNullAndEmpty: true } },
+      { $unwind: { path: '$menu', preserveNullAndEmptyArrays: true } },
       { $group: { _id: { $ifNull: ['$menu.category', 'Other'] }, count: { $sum: '$items.qty' } } },
     ])
     const categoryBreakdown = {}
