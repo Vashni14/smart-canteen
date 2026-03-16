@@ -63,7 +63,9 @@ app.use('/api/admin',     adminRoutes)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', env: process.env.NODE_ENV, time: new Date().toISOString() })
 })
-
+app.get('/', (req, res) => {
+  res.send('🚀 SmartCanteen Backend is running')
+})
 app.use(notFound)
 app.use(errorHandler)
 
