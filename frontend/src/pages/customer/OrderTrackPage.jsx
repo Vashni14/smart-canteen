@@ -18,6 +18,8 @@ export default function OrderTrackPage() {
   const [loading, setLoad]  = useState(true)
   const [error, setError]   = useState(null)
   const [elapsed, setElapsed] = useState(0)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCancelConfirm, setShowCancel] = useState(false)
 
   const fetchOrder = async () => {
     try {
@@ -33,6 +35,20 @@ export default function OrderTrackPage() {
 
   useEffect(() => { fetchOrder(); joinOrder(id) }, [id, joinOrder])
 
+  const handleCancel = async () => {
+    setCancelling(true)
+    try {
+      await orderService.cancel(id, 'Cancelled by customer')
+      setOrder(prev => ({ ...prev, status: 'cancelled', cancelReason: '' }))
+      setShowCancel(false)
+      toast.success('Order cancelled')
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Cannot cancel this order')
+    } finally {
+      setCancelling(false)
+    }
+  }
+
   // Poll every 30s as fallback
   useInterval(fetchOrder, 30_000)
 
@@ -44,7 +60,12 @@ export default function OrderTrackPage() {
     const handler = (updated) => {
       if (updated._id === id || updated.orderId === id) {
         setOrder(prev => ({ ...prev, ...updated }))
-        toast.success(`Order status: ${updated.status?.toUpperCase()} 🔔`)
+        if (updated.status === 'cancelled') {
+          const reason = updated.cancelReason
+          toast.error(reason ? `Order cancelled: "${reason}"` : 'Your order was cancelled')
+        } else {
+          toast.success(`Order status: ${updated.status?.toUpperCase()} 🔔`)
+        }
       }
     }
     on('order:status-updated', handler)
@@ -93,6 +114,9 @@ export default function OrderTrackPage() {
           <OrderStatusTracker
             status={order.status}
             estimatedTime={order.estimatedTime}
+            cancelReason={order.cancelReason}
+            cancelledBy={order.statusHistory?.findLast?.(h => h.status === 'cancelled')?.by?.role || 
+                         (order.cancelReason ? 'chef' : 'customer')}
           />
 
           {/* Kitchen delay notice */}
@@ -140,8 +164,16 @@ export default function OrderTrackPage() {
             </div>
           )}
 
+          {/* Accepted by chef info */}
+          {order.acceptedBy?.name && (
+            <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-100 rounded-2xl text-sm">
+              <span className="text-lg">👨‍🍳</span>
+              <span className="text-secondary">Being prepared by <strong>{order.acceptedBy.name}</strong></span>
+            </div>
+          )}
+
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <Link to="/orders" className="btn-outline flex-1 justify-center">
               All Orders
             </Link>
@@ -149,6 +181,35 @@ export default function OrderTrackPage() {
               Order Again
             </Link>
           </div>
+
+          {/* Cancel button — only when pending or accepted */}
+          {['pending','accepted'].includes(order.status) && (
+            !showCancelConfirm ? (
+              <button
+                onClick={() => setShowCancel(true)}
+                className="btn-ghost w-full text-canteen-danger hover:bg-red-50 border border-red-100"
+              >
+                ✕ Cancel Order
+              </button>
+            ) : (
+              <div className="p-4 bg-red-50 border border-red-200 rounded-2xl space-y-3 animate-fade-in">
+                <p className="font-semibold text-red-800 text-sm">Cancel this order?</p>
+                <p className="text-xs text-red-600">
+                  {order.status === 'accepted'
+                    ? 'The kitchen has already accepted your order. Are you sure?'
+                    : 'Your order will be cancelled immediately.'}
+                </p>
+                <div className="flex gap-2">
+                  <button onClick={() => setShowCancel(false)} className="btn-ghost flex-1 text-sm" disabled={cancelling}>
+                    Keep Order
+                  </button>
+                  <button onClick={handleCancel} className="btn-danger flex-1 text-sm" disabled={cancelling}>
+                    {cancelling ? 'Cancelling…' : 'Yes, Cancel'}
+                  </button>
+                </div>
+              </div>
+            )
+          )}
         </div>
 
         {/* Right: QR code */}

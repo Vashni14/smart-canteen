@@ -15,6 +15,7 @@ const menuRoutes      = require('./routes/menu')
 const orderRoutes     = require('./routes/orders')
 const inventoryRoutes = require('./routes/inventory')
 const adminRoutes     = require('./routes/admin')
+const paymentRoutes   = require('./routes/payment')
 
 const app    = express()
 const server = http.createServer(app)
@@ -59,6 +60,7 @@ app.use('/api/menu',      menuRoutes)
 app.use('/api/orders',    orderRoutes)
 app.use('/api/inventory', inventoryRoutes)
 app.use('/api/admin',     adminRoutes)
+app.use('/api/payment',   paymentRoutes)
 
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', env: process.env.NODE_ENV, time: new Date().toISOString() })

@@ -8,16 +8,26 @@ const STEPS = [
   { key: 'collected', label: 'Collected',  icon: '🎉' },
 ]
 
-export default function OrderStatusTracker({ status, estimatedTime }) {
+export default function OrderStatusTracker({ status, estimatedTime, cancelReason, cancelledBy }) {
   const isCancelled  = status === 'cancelled'
   const currentStep  = STATUS_CONFIG[status]?.step ?? 0
 
   if (isCancelled) {
+    const byKitchen = cancelledBy === 'chef'
     return (
-      <div className="card card-body text-center py-8 animate-fade-in">
-        <span className="text-4xl mb-3 block">❌</span>
+      <div className="card card-body text-center py-8 animate-fade-in space-y-3">
+        <span className="text-4xl block">❌</span>
         <p className="font-display font-bold text-canteen-danger text-lg">Order Cancelled</p>
-        <p className="text-sm text-canteen-muted mt-1">This order has been cancelled.</p>
+        {cancelReason ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-left">
+            <p className="text-xs font-bold text-red-700 uppercase tracking-wider mb-1">
+              {byKitchen ? '👨‍🍳 Reason from kitchen' : 'Reason'}
+            </p>
+            <p className="text-sm text-red-800 font-medium">"{cancelReason}"</p>
+          </div>
+        ) : (
+          <p className="text-sm text-canteen-muted">This order has been cancelled.</p>
+        )}
       </div>
     )
   }

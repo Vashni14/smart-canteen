@@ -42,3 +42,9 @@ export const adminService = {
   updateRole:   (id, role)     => api.patch(`/admin/staff/${id}/role`, { role }),
   deleteStaff:  (id)           => api.delete(`/admin/staff/${id}`),
 }
+
+export const paymentService = {
+  getKey:          ()       => api.get('/payment/key'),
+  createOrder:     (data)   => api.post('/payment/create-order', data),
+  verifyPayment:   (data)   => api.post('/payment/verify', data),
+}
